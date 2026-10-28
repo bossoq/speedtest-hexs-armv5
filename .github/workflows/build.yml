@@ -34,7 +34,17 @@ jobs:
 
       - name: Resolve version
         id: v
-        run: echo "st=${{ github.event.inputs.st_version || '1.2.0' }}" >> "$GITHUB_OUTPUT"
+        run: |
+          ST="${{ github.event.inputs.st_version }}"
+          if [ -z "$ST" ]; then
+            # packagecloud Debian index carries the current Ookla CLI version, e.g. 1.2.0.84-1.<hash>
+            FULL=$(curl -fsSL "https://packagecloud.io/ookla/speedtest-cli/debian/dists/bookworm/main/binary-amd64/Packages" \
+                   | awk -F': ' '/^Version:/{print $2}' | sort -V | tail -1)
+            ST=$(printf '%s' "$FULL" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')   # download URL uses the 3-part version
+          fi
+          [ -n "$ST" ] || { echo "could not resolve Ookla version"; exit 1; }
+          echo "st=$ST" >> "$GITHUB_OUTPUT"
+          echo "Resolved Ookla version: $ST (full: ${FULL:-$ST})"
 
       # No QEMU needed: the fetch stage is pinned to the amd64 builder and the
       # final arm/v5 stage has no RUN (COPY/ENV/ENTRYPOINT only). setup-qemu is
