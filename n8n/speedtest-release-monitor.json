@@ -1,0 +1,100 @@
+{
+  "name": "ookla speedtest monitor -> rebuild hEX S image",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "hours", "hoursInterval": 12 }
+          ]
+        }
+      },
+      "id": "b1111111-1111-4111-8111-111111111111",
+      "name": "Every 12h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://packagecloud.io/ookla/speedtest-cli/debian/dists/bookworm/main/binary-amd64/Packages",
+        "options": {
+          "response": {
+            "response": { "responseFormat": "text" }
+          }
+        }
+      },
+      "id": "b2222222-2222-4222-8222-222222222222",
+      "name": "Get Ookla Packages index",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $json.data || '';\nconst versions = [...text.matchAll(/^Version:\\s*(\\S+)/gm)].map(m => m[1]);\nversions.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));\nconst full = versions[versions.length - 1] || '';\nconst short = (full.match(/^\\d+\\.\\d+\\.\\d+/) || [''])[0];\nconst store = $getWorkflowStaticData('global');\nconst changed = !!short && store.lastFull !== full;\nif (changed) { store.lastFull = full; }\nreturn [{ json: { full, version: short, changed } }];"
+      },
+      "id": "b3333333-3333-4333-8333-333333333333",
+      "name": "New version?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.changed }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b4444444-4444-4444-8444-444444444444",
+      "name": "Changed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.github.com/repos/bossoq/speedtest-hexs-armv5/actions/workflows/build.yml/dispatches",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/vnd.github+json" },
+            { "name": "X-GitHub-Api-Version", "value": "2022-11-28" },
+            { "name": "User-Agent", "value": "n8n-speedtest-monitor" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"ref\": \"main\",\n  \"inputs\": { \"st_version\": \"{{ $json.version }}\" }\n}",
+        "options": {}
+      },
+      "id": "b5555555-5555-4555-8555-555555555555",
+      "name": "Trigger build (workflow_dispatch)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 220],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REPLACE_WITH_GH_PAT_CREDENTIAL", "name": "github-pat (Bearer)" }
+      }
+    }
+  ],
+  "connections": {
+    "Every 12h": { "main": [[{ "node": "Get Ookla Packages index", "type": "main", "index": 0 }]] },
+    "Get Ookla Packages index": { "main": [[{ "node": "New version?", "type": "main", "index": 0 }]] },
+    "New version?": { "main": [[{ "node": "Changed?", "type": "main", "index": 0 }]] },
+    "Changed?": { "main": [[{ "node": "Trigger build (workflow_dispatch)", "type": "main", "index": 0 }], []] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
